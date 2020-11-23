@@ -51,8 +51,6 @@ class TwoHeadsNetwork(nn.Module):
             nn.Softmax(dim=1),
         )
 
-        self.feat6_gap = nn.AvgPool2d(8)  #8
-
         self.feat5_gap = PooledSkip(1024, input_size//16, 1)  # 1024
         self.feat4_gap = PooledSkip(512, input_size//8, 2)   # 512
         self.feat3_gap = PooledSkip(256, input_size//4, 4)   # 256
