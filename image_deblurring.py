@@ -22,7 +22,7 @@ parser.add_argument('--lambda_reblur','-l', type=float, default=1)
 parser.add_argument('--ratio_sigma', type=float, default=2)
 parser.add_argument('--output_folder','-o', type=str, help='output folder', default='sharp_opt_output')
 parser.add_argument('--resize_factor','-rf', type=float, default=1)
-parser.add_argument('--denoiser_model', '-dm', type=str, default='/home/guillermo/github/DPIR/model_zoo/drunet_color.pth', help='denoiser model')
+parser.add_argument('--denoiser_model', '-dm', type=str, default='drunet_color.pth', help='denoiser model')
 parser.add_argument('--use_clamp', type=int, default=0, help='Use clamp in the output')
 parser.add_argument('--alpha', type=float, default=0.9)
 
