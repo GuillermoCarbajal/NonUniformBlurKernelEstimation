@@ -1,5 +1,5 @@
 # Single Image Non-Uniform Blur Kernel Estimation Via Adaptiva Basis Decomposition
-
+# CVPR 2021 Submission 10063
 
 ## Script to compute kernels from an image
 
@@ -19,7 +19,7 @@ Additional options:
   --n_den_iters: number of denoiser steps (default=15)     
   --lambda_reblur: learning rate used in the optimization (default=1)     
   --resize_factor: input image resize factor (default=1)     
-  --alpha: alpha value in Hybrid Steepest Descent algorithm     
+  --alpha: alpha parameter in Hybrid Steepest Descent algorithm     
   --ratio_sigma: controls the amount of denoising (default=2)      
 
 
