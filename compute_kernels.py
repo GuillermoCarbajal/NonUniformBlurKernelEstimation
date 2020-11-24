@@ -63,11 +63,11 @@ blur_mask_val_grid = make_grid(mask_val_n_ext, nrow=K, pad_value=1)
 
 imsave(os.path.join(opt.output_dir, img_name + '_kernels.png' ),
            img_as_ubyte(blur_kernel_val_grid.detach().cpu().numpy().transpose((1, 2, 0))))
-
 print('Kernels saved in ',os.path.join(opt.output_dir, img_name + '_kernels.png') )
 
 imsave(os.path.join(opt.output_dir, img_name + '_masks.png' ),
            img_as_ubyte(blur_mask_val_grid.detach().cpu().numpy().transpose((1, 2, 0))))
 print('Mixing coefficients saved in ',os.path.join(opt.output_dir, img_name + '_mask.png' ))
+
 win_kernels_grid = save_kernels_grid(blurry_image_normalized+0.5, kernels_estimated[0], masks_estimated[0], os.path.join(opt.output_dir, img_name + '_kernels_grid.png'))
 print('Kernels grid saved in ',os.path.join(opt.output_dir, img_name + '_kernels_grid.png' ))
