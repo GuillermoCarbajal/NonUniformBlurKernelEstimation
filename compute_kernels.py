@@ -33,7 +33,7 @@ img_name, ext = img_name.split('.')
 
 print('loading image ',blurry_image_filename)
 blurry_image = imread(blurry_image_filename)
-print('loading image ',blurry_image_filename)
+
 two_heads = TwoHeadsNetwork(K).cuda()
 print('loading weight\'s model')
 two_heads.load_state_dict(torch.load(model_file))
