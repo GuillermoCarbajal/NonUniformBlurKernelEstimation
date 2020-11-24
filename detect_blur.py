@@ -29,7 +29,6 @@ parser.add_argument('--root_dir','-rd', type=str, required=False, default='')
 parser.add_argument('--n_images', type=int, default=0)
 parser.add_argument('--resize_factor','-rf', type=float, default=1)
 parser.add_argument('--rescale_factor','-sf', type=float, default=1)
-parser.add_argument('--architecture','-a', default='Xia', help='architecture to use')
 
 args = parser.parse_args()
 BLUR_KERNEL_SIZE = args.blur_kernel_size
