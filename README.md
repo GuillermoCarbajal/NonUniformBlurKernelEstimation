@@ -7,7 +7,7 @@ python compute_kernels.py -i image_path -m model_path
 
 Model can be found [here](https://www.dropbox.com/s/410672buqv3a881/ADE_L1_LeakyRelu_epoch200_epoch150_epoch150_epoch200_epoch200.pkl?dl=0)
 
-## Script to deblur an image
+## Script to deblur an image or a list of images
 
 python image_deblurring.py -b blurry_img_path --reblur_model model_path --denoiser_model '/path/to/drunet_color.pth'  --output_folder results
 
