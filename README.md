@@ -29,3 +29,6 @@ Additional options:
   --ratio_sigma: controls the amount of denoising (default=2)      
 
 
+## Script to detect blur in an image or a list of images
+
+python detect_blur.py -b blurry_img_path --reblur_model model_path   --output_folder results
