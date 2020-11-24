@@ -3,13 +3,13 @@
 
 ## Script to compute kernels from an image
 
-python compute_kernels.py -i image_path -m model path
+python compute_kernels.py -i image_path -m model_path
 
 Model can be found [here](https://www.dropbox.com/s/410672buqv3a881/ADE_L1_LeakyRelu_epoch200_epoch150_epoch150_epoch200_epoch200.pkl?dl=0)
 
 ## Script to deblur an image
 
-python image_deblurring.py -b blurry_img_path --reblur_model model_path --denoiser_model '/home/guillermo/github/DPIR/model_zoo/drunet_color.pth'  --output_dir results
+python image_deblurring.py -b blurry_img_path --reblur_model model_path --denoiser_model '/path/to/drunet_color.pth'  --output_dir results
 
 Denoiser network (drunet color) can be found [here](https://drive.google.com/file/d/1KDn0ok5Q6dJtAAIBBkiFbHl1ms9kVezz/view?usp=sharing)
 
