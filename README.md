@@ -5,7 +5,7 @@
 
 python compute_kernels.py -i image_path -m model_path
 
-Model can be anonimously downloaded from [here](https://www.dropbox.com/s/410672buqv3a881/ADE_L1_LeakyRelu_epoch200_epoch150_epoch150_epoch200_epoch200.pkl?dl=0)
+Model can be anonimously downloaded from [here](https://www.dropbox.com/s/410672buqv3a881/TwoHeads.pkl?dl=0)
 
 ## Script to deblur an image or a list of images
 
