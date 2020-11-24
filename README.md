@@ -13,12 +13,12 @@ python image_deblurring.py -b blurry_img_path --reblur_model model_path --denois
 
 Denoiser network (drunet color) can be found [here](https://drive.google.com/file/d/1KDn0ok5Q6dJtAAIBBkiFbHl1ms9kVezz/view?usp=sharing)
 
-Additional options:
-  --n_iters: number of iterations in the optimization (default=30)
-  --n_den_iters: number of denoiser steps (default=15)
-  --lambda_reblur: learning rate used in the optimization (default=1)
-  --resize_factor: input image resize factor (default=1)
-  --alpha: alpha value in Hybrid Steepest Descent algorithm
-  --ratio_sigma: controls the amount of denoising (default=2)
+Additional options:       
+  --n_iters: number of iterations in the optimization (default=30)     
+  --n_den_iters: number of denoiser steps (default=15)     
+  --lambda_reblur: learning rate used in the optimization (default=1)     
+  --resize_factor: input image resize factor (default=1)     
+  --alpha: alpha value in Hybrid Steepest Descent algorithm     
+  --ratio_sigma: controls the amount of denoising (default=2)      
 
 
