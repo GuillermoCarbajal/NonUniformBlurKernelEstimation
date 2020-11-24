@@ -11,7 +11,7 @@ Model can be anonimously downloaded from [here](https://www.dropbox.com/s/410672
 
 python image_deblurring.py -b blurry_img_path --reblur_model model_path --denoiser_model denoiser_path  --output_folder results
 
-Denoiser network (drunet color) can be downloaded from [here](https://drive.google.com/file/d/1KDn0ok5Q6dJtAAIBBkiFbHl1ms9kVezz/view?usp=sharing)
+Denoiser network (DRUNet color) can be downloaded from [here](https://drive.google.com/file/d/1KDn0ok5Q6dJtAAIBBkiFbHl1ms9kVezz/view?usp=sharing)
 
 Additional options:   
   --blurry_images: may be a singe image path or a .txt with a list of images.
