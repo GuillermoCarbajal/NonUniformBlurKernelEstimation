@@ -9,7 +9,7 @@ Model can be found [here](https://www.dropbox.com/s/410672buqv3a881/ADE_L1_Leaky
 
 ## Script to deblur an image
 
-python image_deblurring.py -b blurry_img_path --reblur_model model_path --denoiser_model '/path/to/drunet_color.pth'  --output_dir results
+python image_deblurring.py -b blurry_img_path --reblur_model model_path --denoiser_model '/path/to/drunet_color.pth'  --output_folder results
 
 Denoiser network (drunet color) can be found [here](https://drive.google.com/file/d/1KDn0ok5Q6dJtAAIBBkiFbHl1ms9kVezz/view?usp=sharing)
 
