@@ -1,4 +1,3 @@
-
 import os
 import argparse
 import torch
@@ -32,7 +31,7 @@ parser.add_argument('--rescale_factor','-sf', type=float, default=1)
 
 args = parser.parse_args()
 BLUR_KERNEL_SIZE = args.blur_kernel_size
-SAVE_INTERMIDIATE = args.save_intermidiate
+
 
 
 def get_images_list(list_path):
@@ -64,7 +63,7 @@ else:
 if args.n_images > 0:
     blurry_images_list = blurry_images_list[:args.n_images]
 
-two_heads = TwoHeadsNetwork(B).cuda(args.gpu_id)
+two_heads = TwoHeadsNetwork(args.K).cuda(args.gpu_id)
 two_heads.load_state_dict(torch.load(args.reblur_model, map_location='cuda:%d' % args.gpu_id))
 two_heads.eval()
 
@@ -76,11 +75,11 @@ if not os.path.exists(args.output_folder):
 
 blur_type =  'motion'
 
-fnames = glob.glob('/data/blurdetect/image/%s*.jpg' % blur_type)
+
 
 norm_threshold = 0.25
 
-for i,blurry_path in enumerate(fnames):
+for i, blurry_path in enumerate(blurry_images_list):
     img_name, ext = blurry_path.split('/')[-1].split('.')
     blurry_image =  imread(os.path.join(args.root_dir, blurry_path))
 
@@ -120,4 +119,4 @@ for i,blurry_path in enumerate(fnames):
             else:
                 blur_mask += mask
 
-        imsave('masks_out/blur_mask_%f.png' % blur_threshold, blur_mask)
+        imsave('%s/blur_mask.png' % args.output_folder,  blur_mask)
