@@ -1,38 +1,57 @@
-import os
-import argparse
-import torch
-from torchvision import transforms
-
 import numpy as np
+import argparse
+from models.TwoHeadsNetwork_ICCV import TwoHeadsNetwork
+
+import torch
+from scipy.io import savemat
+
 from skimage.io import imread, imsave
 from skimage.transform import resize
+from skimage.color import rgb2ycbcr, ycbcr2rgb, gray2rgb, rgb2gray
 
-from models.TwoHeadsNetwork_CVPR import TwoHeadsNetwork
+
+from torchvision import transforms
+import os
+import json
+
 from utils.visualization import save_image, tensor2im, save_kernels_grid
 from utils.reblur import forward_reblur
-from utils.restoration import get_DRUNet, run_DRUNet, deep_prior_initialization
+from utils.restoration import RL_restore, combined_RL_restore
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--blurry_images', '-b', type=str, required=True, help='list with the original blurry images or path to a blurry image')
+parser.add_argument('--initial_images', '-r', type=str, required=True, help='list with the initial restorations or path to initial image')
+parser.add_argument('--sharp_images', '-s', type=str, required=False, help='list with the original sharp images or path to sharp image')
 parser.add_argument('--reblur_model', '-m', type=str, required=True, help='two heads reblur model')
+parser.add_argument('--K', '-k', type=int, default=25, help='number of kernels in two heads model')
+parser.add_argument('--blur_kernel_size', '-bks', type=int, default=33, help='blur_kernel_szie')
 parser.add_argument('--gpu_id', '-g', type=int, default=0)
 parser.add_argument('--n_iters', '-n', type=int, default=30)
-parser.add_argument('--n_den_iters', '-nd', type=int, default=15)
-parser.add_argument('--lambda_reblur','-l', type=float, default=1)
-parser.add_argument('--ratio_sigma', type=float, default=2)
 parser.add_argument('--output_folder','-o', type=str, help='output folder', default='sharp_opt_output')
+parser.add_argument('--root_dir','-rd', type=str, required=False, default='')
 parser.add_argument('--resize_factor','-rf', type=float, default=1)
-parser.add_argument('--denoiser_model', '-dm', type=str, default='drunet_color.pth', help='denoiser model')
-parser.add_argument('--use_clamp', type=int, default=0, help='Use clamp in the output')
-parser.add_argument('--alpha', type=float, default=0.9)
+parser.add_argument('--saturation_method', type=str, default='combined')
+parser.add_argument('--regularization','-reg', type=str, help='regularization method')
+parser.add_argument('--reg_factor', type=float, default=1e-3, help='regularization factor')
+parser.add_argument('--sat_threshold','-sth', type=float, default=0.99)
+parser.add_argument('--gamma_factor', type=float, default=1.0, help='gamma correction factor')
+parser.add_argument('--optim_iters', action='store_true', default=False, help='stop iterating when reblur loss is 1e-6')
+parser.add_argument('--smoothing', action='store_true', default=False, help='apply smoothing to the saturated region mask')
+parser.add_argument('--erosion', action='store_true', default=False, help='apply erosion to the non-saturated region')
+parser.add_argument('--dilation', action='store_true', default=False, help='apply dilation to the saturated region using the kernel as structural element')
+parser.add_argument('--debug', action='store_true', default=False, help='debug mode')
 
+'''
+-b /media/carbajal/OS/data/datasets/cvpr16_deblur_study_real_dataset/real_dataset/coke.jpg -r /media/carbajal/OS/data/datasets/cvpr16_deblur_study_real_dataset/real_dataset/coke.jpg -m /media/carbajal/OS/data/models/ade_dataset/NoFC/gamma_correction/L1/L2_epoch150_epoch150_L1_epoch900.pkl -n 20 -o coke --saturation_method 'combined'
+'''
 
-B = 25 # number of kernels
-BLUR_KERNEL_SIZE = 33
-SAVE_INTERMIDIATE = False
 args = parser.parse_args()
 
+if not os.path.exists(args.output_folder):
+    os.makedirs(args.output_folder)
 
+with open(os.path.join(args.output_folder, 'args.txt'), 'w') as f:
+    json.dump(args.__dict__, f, indent=2)
 
 def get_images_list(list_path):
 
@@ -43,122 +62,96 @@ def get_images_list(list_path):
 
     return images_list
 
-
+def compute_kernels_from_base(base_kernels, masks, GPU=0):
+    output_kernel = torch.empty((masks.shape[-2],masks.shape[-1],base_kernels.shape[-2]*base_kernels.shape[-1])).cuda(GPU)
+    for k in range(base_kernels.shape[0]):
+        kernel_k = base_kernels[ k, :, :].view(-1)
+        masks_k = masks[k, :, :]
+        aux = masks_k[:, :, None] * kernel_k[None, None, :]
+        output_kernel += aux
+        del aux
+        torch.cuda.empty_cache()
+    return output_kernel
 
 
 if args.blurry_images.endswith('.txt'):
     blurry_images_list = get_images_list(args.blurry_images)
+    initial_images_list = get_images_list(args.initial_images)
 else:
     blurry_images_list = [args.blurry_images]
+    initial_images_list = [args.initial_images]
 
 
 
-two_heads = TwoHeadsNetwork(B).cuda(args.gpu_id)
+two_heads = TwoHeadsNetwork(args.K).cuda(args.gpu_id)
 two_heads.load_state_dict(torch.load(args.reblur_model, map_location='cuda:%d' % args.gpu_id))
 two_heads.eval()
 
-rhos, sigmas = deep_prior_initialization(num_iters=args.n_den_iters, GPU=args.gpu_id)
-
-# denoiser model
-denoiser = get_DRUNet(args.denoiser_model,args.gpu_id)
-
-
-for name, param in two_heads.named_parameters():
-    if param.requires_grad:
-        param.requires_grad = False
-
-if not os.path.exists(args.output_folder):
-    os.makedirs(args.output_folder)
-
 PSNR_gains, PSNRs, reblur_losses_val = [], [], []
+SSIM_gains, SSIMs = [], []
 
-for i, blurry_path in enumerate(blurry_images_list):
-    print('---')
-    print('Processsing ', blurry_path)
+for i,(blurry_path, restored_path) in enumerate(zip(blurry_images_list, initial_images_list)):
+
     img_name, ext = blurry_path.split('/')[-1].split('.')
-    blurry_image =  imread(os.path.join(blurry_path))
+    blurry_image =  imread(os.path.join(args.root_dir, blurry_path))
     blurry_image = blurry_image[:,:,:3]
+    #blurry_image = blurry_image[-288: ,:288,:]
     M, N, C = blurry_image.shape
     if args.resize_factor != 1:
+        if len(blurry_image.shape) == 2:
+            blurry_image = gray2rgb(blurry_image)
         new_shape = (int(args.resize_factor*M), int(args.resize_factor*N), C )
-        blurry_image = resize(blurry_image, new_shape).astype(np.float32)
-
+        blurry_image = resize(blurry_image,new_shape).astype(np.float32)
 
     blurry_tensor = transforms.ToTensor()(blurry_image)
     blurry_tensor = blurry_tensor[None,:,:,:]
-    blurry_tensor = blurry_tensor.cuda(args.gpu_id) - 0.5
-    save_image(tensor2im(blurry_tensor[0].detach()), os.path.join(args.output_folder,
+    blurry_tensor = blurry_tensor.cuda(args.gpu_id)
+
+
+    initial_image = imread(os.path.join(args.root_dir, restored_path))
+    initial_image = initial_image[:, :, :3]
+
+
+    #initial_image = initial_image[-288: ,:288, :]
+    if args.resize_factor != 1:
+        if len(initial_image.shape) == 2:
+            initial_image = gray2rgb(initial_image)
+        new_shape = (int(args.resize_factor*M), int(args.resize_factor*N), C )
+        initial_image = resize(initial_image,new_shape).astype(np.float32)
+
+
+
+    initial_restoration_tensor = transforms.ToTensor()(initial_image)
+    initial_restoration_tensor = initial_restoration_tensor[None, :, :, :]
+    initial_restoration_tensor = initial_restoration_tensor.cuda(args.gpu_id)
+
+    save_image(tensor2im(initial_restoration_tensor[0] - 0.5), os.path.join(args.output_folder,
                                                        img_name + '.png' ))
 
-    # initialization
-    padding = torch.nn.ReflectionPad2d(BLUR_KERNEL_SIZE // 2)
-    output = padding(blurry_tensor)
-    output.requires_grad = True
-    output_optimizer = torch.optim.Adam([output, ], lr=1e-6)
-
-    # Compute kernels
     with torch.no_grad():
-        kernels, masks = two_heads(blurry_tensor)
-        save_kernels_grid(blurry_tensor[0]+0.5,kernels[0], masks[0], os.path.join(args.output_folder, img_name + '_kernels.png'))
-        output_reblurred = forward_reblur(output, kernels, masks, args.gpu_id)
+
+        blurry_tensor_to_compute_kernels = blurry_tensor**args.gamma_factor - 0.5
+        kernels, masks = two_heads(blurry_tensor_to_compute_kernels)
+        save_kernels_grid(blurry_tensor[0],kernels[0], masks[0], os.path.join(args.output_folder, img_name + '_kernels'+'.png'))
 
 
-    reblur_loss = torch.mean((output_reblurred - blurry_tensor) ** 2)
-
-    psnr_val = 10 * np.log10(1 / reblur_loss.item())
-    print('PSNR gt_reblurred-real_A', psnr_val)
-    reblur_losses_val.append(psnr_val)
-
-    for it in range(args.n_iters):
-
-        output_reblurred = forward_reblur(output, kernels, masks, args.gpu_id)
+    output = initial_restoration_tensor
 
 
-        # compute ||K*I -B||
-        reblur_loss = torch.mean((output_reblurred - blurry_tensor) ** 2)
+    with torch.no_grad():
 
-        # do optimization step
-        output_optimizer.zero_grad()
-        output.retain_grad()
-        reblur_loss.backward(retain_graph=True)
-
-
-        # clamp I to valid range
-        if args.use_clamp:
-            output.data = (output.data - output.grad.data  * args.lambda_reblur * (args.resize_factor*M)*(args.resize_factor*N)).clamp(-0.5, 0.5)
+        if args.saturation_method == 'combined':
+            output = combined_RL_restore(blurry_tensor, output, kernels, masks, args.n_iters,
+                                         args.gpu_id, SAVE_INTERMIDIATE=True, saturation_threshold=args.sat_threshold,
+                                         reg_factor=args.reg_factor, optim_iters=args.optim_iters, gamma_correction_factor=args.gamma_factor,
+                                         apply_dilation=args.dilation, apply_smoothing=args.smoothing, apply_erosion=args.erosion, isDebug=args.debug)
         else:
-            output.data = (output.data - output.grad.data  * args.lambda_reblur * (args.resize_factor*M)*(args.resize_factor*N))
+            output = RL_restore(blurry_tensor, output, kernels, masks, args.n_iters,
+                                args.gpu_id, SAVE_INTERMIDIATE=True,
+                                method=args.saturation_method,gamma_correction_factor=args.gamma_factor,
+                                saturation_threshold=args.sat_threshold, reg_factor=args.reg_factor, isDebug=args.debug)
 
 
-        denoiser_period = np.ceil(args.n_iters / len(sigmas)).astype(np.int)
-        is_denoiser_step = (it+1) % denoiser_period == 0
-        if (it > 0 and is_denoiser_step) or it==(args.n_iters-1):
+    output_img = tensor2im(torch.clamp(output[0],0,1) - 0.5)
+    save_image(output_img, os.path.join(args.output_folder, img_name + '_restored.png' ))
 
-            denoiser_call_counter = int((it+1) / denoiser_period)
-            print('iter=%d/%d , periodicity=%d, call counter =%d' % (it+1, args.n_iters, denoiser_period, denoiser_call_counter))
-
-            z = output + 0.5
-            z = run_DRUNet(denoiser, z, sigmas[denoiser_call_counter-1]/args.ratio_sigma, compute_grad=False)
-            z = z - 0.5
-
-            output.data = (1 - args.alpha)*output.data + args.alpha * z.data
-            output.requires_grad = True
-
-
-
-
-        if ( ((SAVE_INTERMIDIATE and it % (args.n_iters//10) == 0) or  it == (args.n_iters - 1)) ): #''' '''
-
-            if it == (args.n_iters - 1):
-                filename = os.path.join(args.output_folder, img_name + '_restored_l_%f_nd_%f_n_%f_r_%f_clamp_%d.png' % (args.lambda_reblur, args.n_den_iters, args.n_iters,args.ratio_sigma, int(args.use_clamp)))
-            else:
-                filename = os.path.join(args.output_folder,img_name + '_iter_%06i.png' % it )
-
-
-            save_image(tensor2im(output[0, :, BLUR_KERNEL_SIZE // 2:-(BLUR_KERNEL_SIZE // 2),
-                                              BLUR_KERNEL_SIZE // 2:-(BLUR_KERNEL_SIZE // 2)].detach().clamp(-0.5, 0.5)), filename)
-
-
-            print(i, it, 'reblur: ', reblur_loss.item())
-
-            torch.cuda.empty_cache()

@@ -7,7 +7,8 @@ import torch.nn.functional as F
 
 
 class TwoHeadsNetwork(nn.Module):
-    def __init__(self, K=9, blur_kernel_size=33, bilinear=False, no_softmax=False, input_size=256):
+    def __init__(self, K=9, blur_kernel_size=33, bilinear=False,
+                 no_softmax=False, input_size=256):
         super(TwoHeadsNetwork, self).__init__()
 
         self.no_softmax = no_softmax
@@ -26,7 +27,6 @@ class TwoHeadsNetwork(nn.Module):
         self.blur_kernel_size = blur_kernel_size
         self.K=K
 
-        #self.inc_gray = DoubleConv(1, 64,2)
         self.down1 = Down(64, 64)
         self.down2 = Down(64, 128)
         self.down3 = Down(128, 256)
@@ -51,24 +51,28 @@ class TwoHeadsNetwork(nn.Module):
             nn.Softmax(dim=1),
         )
 
-        self.feat5_gap = PooledSkip(1024, input_size//16, 1)  # 1024
-        self.feat4_gap = PooledSkip(512, input_size//8, 2)   # 512
-        self.feat3_gap = PooledSkip(256, input_size//4, 4)   # 256
-        self.feat2_gap = PooledSkip(256,input_size//2, 8)   # 256
+        self.feat5_gap = PooledSkip(1024, input_size//16, 2)  # 1024
+        self.feat4_gap = PooledSkip(512, input_size//8, 4)   # 512
+        self.feat3_gap = PooledSkip(256, input_size//4, 8)   # 256
+        self.feat2_gap = PooledSkip(256,input_size//2, 16)   # 256
+        self.feat1_gap = PooledSkip(256, input_size, 32)  # 256
 
         self.kernel_up1 = Up(1024,1024, 512, bilinear)
         self.kernel_up2 = Up(512,512, 256, bilinear)
         self.kernel_up3 = Up(256,256, 256, bilinear)
         self.kernel_up4 = Up(256,128, 128, bilinear)
-        
+        self.kernel_up5 = Up(128,64, 64, bilinear)
+        if self.blur_kernel_size>33:
+            self.kernel_up6 = Up(64, 0, 64, bilinear)
+
         self.kernels_end = nn.Sequential(
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.Conv2d(64, 64, kernel_size=2, padding=1),
             nn.LeakyReLU(inplace=True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
             nn.LeakyReLU(inplace=True),
-            nn.Conv2d(128, K*self.blur_kernel_size*self.blur_kernel_size, kernel_size=8),
+            nn.Conv2d(64, K, kernel_size=3, padding=1)
+            #nn.Conv2d(128, K*self.blur_kernel_size*self.blur_kernel_size, kernel_size=8),
         )
-        
         self.kernel_softmax = nn.Softmax(dim=2)
 
     def forward(self, x):
@@ -83,8 +87,8 @@ class TwoHeadsNetwork(nn.Module):
         x4_feat, x5 = self.down4(x4)
         x5_feat, x6 = self.down5(x5)
         x6_feat = self.feat(x6)
-        #print(x5_feat.shape, x6_feat.shape)
-        #Kernel
+
+        #print(x1.shape, x2.shape, x3.shape, x4.shape, x5.shape, x6.shape)
         #k = self.kernel_network(x3)
         feat6_gap = x6_feat.mean((2,3), keepdim=True) #self.feat6_gap(x6_feat)
         #print('x6_feat: ', x6_feat.shape,'feat6_gap: ' , feat6_gap.shape)
@@ -96,6 +100,7 @@ class TwoHeadsNetwork(nn.Module):
         #print('x3_feat: ', x3_feat.shape,'feat3_gap: ' , feat3_gap.shape)
         feat2_gap = self.feat2_gap(x2_feat)
         #print('x2_feat: ', x2_feat.shape,'feat2_gap: ' , feat2_gap.shape)
+        feat1_gap = self.feat1_gap(x1_feat)
         #print(feat5_gap.shape, feat4_gap.shape)
         k1 = self.kernel_up1(feat6_gap, feat5_gap)
         #print('k1 shape', k1.shape)
@@ -105,17 +110,22 @@ class TwoHeadsNetwork(nn.Module):
         #print('k3 shape', k3.shape)
         k4 = self.kernel_up4(k3, feat2_gap)
         #print('k4 shape', k4.shape)
+        k5 = self.kernel_up5(k4, feat1_gap)
 
-
-        k5 = self.kernels_end(k4)
-        N, F, H, W = k5.shape  # H and W should be one
-        k5 = k5.view(N, self.K, self.blur_kernel_size * self.blur_kernel_size)
+        if self.blur_kernel_size==65:
+            k6 = self.kernel_up6(k5)
+            k = self.kernels_end(k6)
+        else:
+            k = self.kernels_end(k5)
+        N, F, H, W = k.shape  # H and W should be one
+        k = k.view(N, self.K, self.blur_kernel_size * self.blur_kernel_size)
 
         if self.no_softmax:
-            k = functional.leaky_relu(k5)
+            k = functional.leaky_relu(k)
+            #suma = k5.sum(2, keepdim=True)
+            #k = k5 / suma
         else:
-            k = self.kernel_softmax(k5)
-
+            k = self.kernel_softmax(k)
 
         k = k.view(N, self.K, self.blur_kernel_size, self.blur_kernel_size)
 
@@ -126,6 +136,7 @@ class TwoHeadsNetwork(nn.Module):
         x10 = self.up4(x9, x2_feat)
         x11 = self.up5(x10, x1_feat)
         logits = self.masks_end(x11)
+
         return  k,logits
 """ Parts of the U-Net model """
 
@@ -133,7 +144,7 @@ class TwoHeadsNetwork(nn.Module):
 class Down(nn.Module):
     """double conv and then downscaling with maxpool"""
 
-    def __init__(self, in_channels, out_channels, antialiased=False, antialiased_kernel_size=3):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels,  kernel_size=3, padding=1),
@@ -182,27 +193,33 @@ class Up(nn.Module):
             nn.LeakyReLU(inplace=True),
         )
 
-    def forward(self, x1, x2):
+    def forward(self, x1, x2=None):
+        #print('initial x1: ', x1.shape)
         x1 = self.up(x1)
         x1 = self.double_conv(x1)
-        # input is CHW
-        diffY = torch.tensor([x2.size()[2] - x1.size()[2]])
-        diffX = torch.tensor([x2.size()[3] - x1.size()[3]])
+        #print('x1 after upsampling: ', x1.shape)
 
-        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
-                        diffY // 2, diffY - diffY // 2])
         # if you have padding issues, see
         # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
         # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
-        x = torch.cat([x2, x1], dim=1)
+        if x2 is not None:
+          
+            diffY = torch.tensor([x2.size()[2] - x1.size()[2]])
+            diffX = torch.tensor([x2.size()[3] - x1.size()[3]])
+
+            x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
+                        diffY // 2, diffY - diffY // 2])
+            #print('x2: ', x2.shape)
+            x = torch.cat([x2, x1], dim=1)
+        else:
+            x = x1
         #print('input feat forward', x.shape)
         feat = self.feat(x)
         return feat
 
 class PooledSkip(nn.Module):
-    def __init__(self, input_channels, input_spatial_size, output_spatial_size):
+    def __init__(self, input_channels, input_spatial_size, output_spatial_size, antialiased=False, antialiased_kernel_size=3, max_pooling=False):
         super().__init__()
-
 
         self.gap = nn.AvgPool2d(input_spatial_size)
         self.output_spatial_size = output_spatial_size
@@ -211,4 +228,3 @@ class PooledSkip(nn.Module):
         global_avg_pooling = x.mean((2,3), keepdim=True) #self.gap(x)
         #print('gap shape:' , global_avg_pooling.shape)
         return global_avg_pooling.repeat(1,1,self.output_spatial_size,self.output_spatial_size)
-

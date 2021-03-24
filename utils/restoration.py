@@ -1,110 +1,268 @@
 import torch
-from utils.utils_sisr import pre_calculate, data_solution
+
 from utils.visualization import save_image, tensor2im
-import os
-from utils.reblur import saturate_image
+from utils.reblur import forward_reblur, apply_saturation_function
 import numpy as np
-from DPIR.models.network_unet import UNetRes as drunet
-from DPIR.models.network_dncnn import IRCNN as net
-from DPIR.utils import utils_pnp as pnp
-from DPIR.utils import utils_model
-
-def restore(blurry_tensor, kernels, masks, GPU, arho= 0.0056):
-    kernels_conv = torch.flip(kernels,[2,3])
-    N, C, H, W = blurry_tensor.shape
-    K = kernels.shape[1]
-    y = torch.zeros((N, C, H, W)).cuda(GPU)
-    rho = torch.tensor([arho]).cuda(GPU)
-    tau = rho.repeat(1, 1, 1, 1)
-    sf = 1
-    for n in range(N):
-        for k in range(K):
-            FB, FBC, F2B, FBFy = pre_calculate(blurry_tensor[n:n+1, :, :, :],
-                                               kernels_conv[n:n+1, k:k + 1, :, :], sf)
-            x_k = data_solution(blurry_tensor[n:n+1, :, :, :], FB, FBC, F2B, FBFy, tau, sf)
-            y[n:n+1, :,:,:] += masks[n:n+1, k:k + 1, :, :] * x_k
-
-    sat_y = saturate_image(y)
-    return sat_y
-
-def restore_with_GT(blurry_tensor, sharp_image, kernels, masks, GPU, arho= 0.0056):
-    kernels_conv = torch.flip(kernels,[2,3])
-    N, C, H, W = blurry_tensor.shape
-    K = kernels.shape[1]
-    y = torch.zeros((N, C, H, W)).cuda(GPU)
-    rho = torch.tensor([arho]).cuda(GPU)
-    tau = rho.repeat(1, 1, 1, 1)
-    sf = 1
-    for n in range(N):
-        for k in range(K):
-            FB, FBC, F2B, FBFy = pre_calculate(blurry_tensor[n:n+1, :, :, :],
-                                               kernels_conv[n:n+1, k:k + 1, :, :], sf)
-            x_k = data_solution(sharp_image[n:n+1, :, :, :], FB, FBC, F2B, FBFy, tau, sf)
-            y[n:n+1, :,:,:] += masks[n:n+1, k:k + 1, :, :] * x_k
-
-    sat_y = saturate_image(y)
-    return sat_y
+import os
+from torch.nn import functional as F
 
 
+def gradient_v2(img):
 
-def deep_prior_initialization(num_iters=8, GPU=0):
+    G_x = torch.zeros_like(img).to(img.device)
+    G_y = torch.zeros_like(img).to(img.device)
+    C = img.shape[1]
 
-    noise_level_img = 7.65 / 255.0  # default: 0, noise level for LR image
-    noise_level_model = noise_level_img  # noise level of model, default 0
-    # model_name = 'drunet_color'  # 'drunet_gray' | 'drunet_color' | 'ircnn_gray' | 'ircnn_color'
-    x8 = True  # default: False, x8 to boost performance
-    modelSigma1 = 49
-    modelSigma2 = noise_level_model * 255.
+    a = torch.Tensor([[1, 0, -1],
+                      [2, 0, -2],
+                      [1, 0, -1]]).to(img.device)
 
-    rhos, sigmas = pnp.get_rho_sigma(sigma=max(0.255 / 255., noise_level_model), iter_num=num_iters,
-                                     modelSigma1=modelSigma1, modelSigma2=modelSigma2, w=1.0)
-    rhos, sigmas = torch.tensor(rhos).to(GPU), torch.tensor(sigmas).to(GPU)
+    a = a.view((1, 1, 3, 3))
 
-    return rhos, sigmas
+    b = torch.Tensor([[1, 2, 1],
+                      [0, 0, 0],
+                      [-1, -2, -1]]).to(img.device)
 
-def get_DRUNet(model_path, GPU, n_channels=3):
+    b = b.view((1, 1, 3, 3))
 
-    denoiser = drunet(in_nc=n_channels + 1, out_nc=n_channels, nc=[64, 128, 256, 512], nb=4, act_mode='R',
-                      downsample_mode="strideconv", upsample_mode="convtranspose")
-    denoiser.load_state_dict(torch.load(model_path), strict=True)
-    denoiser.eval()
-    for _, v in denoiser.named_parameters():
-        v.requires_grad = False
-    denoiser = denoiser.to(GPU)
+    for c in range(C):
 
-    return denoiser
+        G_x[0,c,:,:] = F.conv2d(img[:,c:c+1,:,:], a, padding=1)
 
-def get_IRCNN(model_path, n_channels=3):
-    model = net(in_nc=n_channels, out_nc=n_channels, nc=64)
-    model25 = torch.load(model_path)
-    former_idx = 0
-    return model, model25, former_idx
+        G_y[0,c,:,:]  = F.conv2d(img[:,c:c+1,:,:], b, padding=1)
 
-def run_IRCNN(model, img, model25, sigma, former_idx, GPU, compute_grad=True):
-    current_idx = np.int(np.ceil(sigma.cpu().numpy() * 255. / 2.) - 1)
-    if current_idx != former_idx:
-        model.load_state_dict(model25[str(current_idx)], strict=True)
-        model.eval()
-        for _, v in model.named_parameters():
-            v.requires_grad = False
-        model = model.to(GPU)
-    former_idx = current_idx
-    if compute_grad:
-        deblurred_img = model(img)
-    else:
+    return G_y, G_x
+
+def gradient(x):
+    # idea from tf.image.image_gradients(image)
+    # https://github.com/tensorflow/tensorflow/blob/r2.1/tensorflow/python/ops/image_ops_impl.py#L3441-L3512
+    # x: (b,c,h,w), float32 or float64
+    # dx, dy: (b,c,h,w)
+
+    h_x = x.size()[-2]
+    w_x = x.size()[-1]
+    # gradient step=1
+    left = x
+    right = F.pad(x, [0, 1, 0, 0])[:, :, :, 1:]
+    top = x
+    bottom = F.pad(x, [0, 0, 0, 1])[:, :, 1:, :]
+
+    # dx, dy = torch.abs(right - left), torch.abs(bottom - top)
+    dx, dy = right - left, bottom - top
+    # dx will always have zeros in the last column, right-left
+    # dy will always have zeros in the last row,    bottom-top
+    dx[:, :, :, -1] = 0
+    dy[:, :, -1, :] = 0
+
+    return dy, dx
+
+
+def normalised_gradient_divergence(F):
+    """ compute the divergence of n-D scalar field `F` """
+    gy, gx = gradient_v2(F)
+    eps = 1e-9
+    ngy = gy.clone().to(F.device)
+    ngx = gx.clone().to(F.device)
+    norm = torch.sqrt(gx**2 + gy**2)
+    ngy[norm < eps]=  eps
+    ngx[norm < eps] = eps
+    ngy[norm >= eps] = torch.div(gy[norm >= eps], norm[norm >= eps])
+    ngx[norm >= eps] = torch.div(gx[norm >= eps], norm[norm >= eps])
+    gxy, gxx = gradient_v2(ngx)
+    gyy, gyx = gradient_v2(ngy)
+    return gxx + gyy
+
+
+
+def RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, GPU,
+               SAVE_INTERMIDIATE=True, method='basic', saturation_threshold=0.7,
+               reg_factor=1e-3, gamma_correction_factor=1.0, isDebug=False):
+
+    epsilon = 1e-6
+
+    deblug_folder = './RL_deblug'
+    if not os.path.exists(deblug_folder):
+        os.makedirs(deblug_folder)
+
+    blurry_tensor_ph = blurry_tensor ** gamma_correction_factor  # to photons space
+    output = initial_output
+    kernels_flipped = torch.flip(kernels, dims=(2, 3))
+    for it in range(n_iters):
+        output_ph = output** gamma_correction_factor
+        output_reblurred_ph = forward_reblur(output_ph, kernels, masks, GPU, size='same',
+                                          padding_mode='reflect', manage_saturated_pixels=False, max_value=1)
+        #output_reblurred = output_reblurred_ph**(1.0/gamma_correction_factor)  # to pixels space
+        if method=='basic':
+            relative_blur = torch.div(blurry_tensor_ph, output_reblurred_ph + epsilon)
+
+        elif method=='function':
+            R = apply_saturation_function(output_reblurred_ph, max_value=1)
+            R_prima = apply_saturation_function(output_reblurred_ph, max_value=1, get_derivative=True)
+            relative_blur =  torch.div(blurry_tensor_ph * R_prima, R + epsilon) + 1 - R_prima
+        elif method=='masked':
+            mask = blurry_tensor < saturation_threshold
+            relative_blur =  torch.div(blurry_tensor_ph * mask, output_reblurred_ph + epsilon) + 1 - mask.float()
+
+        error_estimate = forward_reblur(relative_blur, kernels_flipped, masks, GPU, size='same',
+                                        padding_mode='reflect', manage_saturated_pixels=False, max_value=1)
+
+        output_ph = output_ph * error_estimate
+        J_reg_grad = reg_factor * normalised_gradient_divergence(output)
+        output = output_ph**(1.0/gamma_correction_factor)*(1.0/(1-J_reg_grad))
+
+
+        if isDebug:
+            # compute ||K*I -B||
+            # reblur_loss = model.reblurLoss(2*output_reblurred,  model.real_A[:,:, K//2:-K//2+1, K//2:-K//2+1]) * opt.lambda_reblur
+            reblur_loss = torch.mean((output_reblurred_ph**(1.0/gamma_correction_factor) - blurry_tensor) ** 2)
+            PSNR_reblur = 10 * np.log10(1 / reblur_loss.item())
+            print('PSNR_reblur', PSNR_reblur)
+            if ( ((SAVE_INTERMIDIATE and it % np.max([1, n_iters // 10]) == 0)or  it == (n_iters - 1)) ):
+
+                if it == (n_iters - 1):
+                    filename = os.path.join(deblug_folder,'iter_%06i_restored.png' % (n_iters))
+                else:
+                    filename = os.path.join(deblug_folder, 'iter_%06i.png' % it )
+
+                save_image(tensor2im(output[0].detach().clamp(0, 1)-0.5), filename)
+
+                print(it, 'PSNR_reblur: ', PSNR_reblur.item())
+
+        #output[output < 0] = 0
+        #output[output > 1] = 1
+
+    return output
+
+
+def combined_RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, GPU,
+                        SAVE_INTERMIDIATE=True, saturation_threshold=0.9, reg_factor=1e-3,
+                        optim_iters=False, gamma_correction_factor=1.0, apply_smoothing=True, apply_erosion=True,
+                        apply_dilation=True, isDebug=False):
+    epsilon = 1e-6
+    output = initial_output
+    deblug_folder = './RL_deblug'
+    if not os.path.exists(deblug_folder):
+        os.makedirs(deblug_folder)
+
+    erosion_kernel = torch.ones(1, 1, 3, 3).to(output.device)
+    smooth_kernel = 1.0 / 9 * torch.ones(1, 1, 3, 3).to(output.device)
+
+    # smooth_kernel = torch.sum(kernels, dim=1, keepdim=True)/kernels.shape[1]
+    # smooth_kernel =  torch.Tensor([[[[0.9,0.94,0.9],[0.94,1,0.94], [0.9,0.94,0.9]]]]).to(output.device)
+    # smooth_kernel = smooth_kernel/smooth_kernel.sum()
+    previous_reblur_loss = 1000
+    blurry_tensor_ph = blurry_tensor**gamma_correction_factor
+    kernels_flipped = torch.flip(kernels, dims=(2, 3))
+    for it in range(n_iters):
+
+        u = (output < saturation_threshold).float()
+
+        # erosion
+        if apply_erosion:
+            for c in range(u.shape[1]):
+                u[0:1, c:c + 1, :, :] = 1 - (F.conv2d(1 - u[:, c:c + 1, :, :], erosion_kernel,
+                                                      padding=erosion_kernel.shape[2] // 2) > 0).float()
+
+        # smoothing
+        if apply_smoothing:
+            for c in range(u.shape[1]):
+                u[0:1, c:c + 1, :, :] = F.conv2d(u[:, c:c + 1, :, :], smooth_kernel, padding=smooth_kernel.shape[2] // 2)
+
+        # u, _=torch.min(u, dim=1, keepdim =True)
+        # u =  torch.repeat_interleave(u,3,dim=1)
+        f_u = u * output
+        f_s = output - f_u
+
+
+        if apply_dilation:
+            non_zero_elements = torch.sum(kernels, dim=1, keepdim=True)
+            dilation_kernel = (non_zero_elements > 0.25 * non_zero_elements.max()).float()
+            # dilation_kernel = torch.repeat_interleave(dilation_kernel/dilation_kernel.sum(), 3, dim=0)
+            v = torch.zeros_like(u).to(output.device)
+            for c in range(u.shape[1]):
+                v[0:1, c:c + 1, :, :] = F.conv2d(1 - u[:, c:c + 1, :, :], dilation_kernel,
+                                                 padding=dilation_kernel.shape[2] // 2)
+            v = 1 - (v > 0).float()
+        else:
+            v=u
+
+        output_ph = output ** gamma_correction_factor  # from pixels to photons
+        output_reblurred_ph = forward_reblur(output_ph, kernels, masks, GPU, size='same',
+                                          padding_mode='reflect', manage_saturated_pixels=False, max_value=1)
+        #output_reblurred = output_reblurred_ph ** (1.0 / gamma_correction_factor)  # from photons to pixels space
+
+        R = apply_saturation_function(output_reblurred_ph, max_value=1)
+        R_prima = apply_saturation_function(output_reblurred_ph, max_value=1, get_derivative=True)
+        #print(output_reblurred_ph.device, R.device, R_prima.device)
+        relative_blur_u = torch.div(blurry_tensor_ph * R_prima * v, R + epsilon) + 1 - R_prima * v
+        relative_blur_s = torch.div(blurry_tensor_ph * R_prima, R + epsilon) + 1 - R_prima
+
+        error_estimate_u = forward_reblur(relative_blur_u,kernels_flipped , masks, GPU, size='same',
+                                          padding_mode='reflect', manage_saturated_pixels=False, max_value=1)
+        error_estimate_s = forward_reblur(relative_blur_s, kernels_flipped, masks, GPU, size='same',
+                                          padding_mode='reflect', manage_saturated_pixels=False, max_value=1)
+
+
+        f_u_ph = ((f_u**gamma_correction_factor) *  error_estimate_u)
+        f_s_ph = ((f_s**gamma_correction_factor) * error_estimate_s)
+        f_u = f_u_ph **(1.0/gamma_correction_factor)
+        f_s = f_s_ph ** (1.0 / gamma_correction_factor)
+        output_it = (f_u + f_s)
+
+        J_reg_grad = reg_factor * normalised_gradient_divergence(output)
+        output_it *= (1.0 / (1 - J_reg_grad))
+
         with torch.no_grad():
-            deblurred_img = model(img)
-    return deblurred_img, model, model25, former_idx
+            reblur_loss = torch.mean((output_reblurred_ph**(1.0/gamma_correction_factor) - blurry_tensor) ** 2)
+            # print(previous_reblur_loss, reblur_loss.item(), previous_reblur_loss - reblur_loss.item())
+            if ((previous_reblur_loss - reblur_loss.item()) < epsilon and optim_iters):
+                break
+            else:
+                output = output_it
+
+            previous_reblur_loss = reblur_loss.item()
+
+        if isDebug:
+            E = (output**2).mean()
+            print('Energy=%f' % E)
+            print('Range=[%f, %f]' % (output.min(), output.max()))
+            if (((SAVE_INTERMIDIATE and it % np.max([1, n_iters // 10]) == 0) or it == (n_iters - 1))):  # ''' '''
+                PSNR_reblur = 10 * np.log10(1 / reblur_loss.item())
+                print(it, 'PSNR_reblur: ', PSNR_reblur.item())
+                if it == (n_iters - 1):
+                    filename = os.path.join(deblug_folder, 'restored_n_%f.png' % (n_iters))
+                else:
+                    filename = os.path.join(deblug_folder, 'iter_%06i.png' % it)
+
+                save_image(tensor2im(output[0].detach().clamp(0, 1) - 0.5), filename)
+                save_image(tensor2im(u[0].detach().clamp(0, 1) - 0.5),
+                           os.path.join(deblug_folder, 'u_iter_%06i.png' % it))
+                save_image(tensor2im(v[0].detach().clamp(0, 1) - 0.5),
+                           os.path.join(deblug_folder, 'v_iter_%06i.png' % it))
+                # save_image(tensor2im(f_u[0].detach().clamp(0, 1) - 0.5),
+                #            os.path.join(deblug_folder, 'f_u_iter_%06i.png' % it))
+                # save_image(tensor2im(f_s[0].detach().clamp(0, 1) - 0.5),
+                #            os.path.join(deblug_folder, 'f_s_iter_%06i.png' % it))
+
+        #output = (output - output.min()) / (output.max() - output.min())
+        #output[output < 0] = 0
+        #output[output > 1] = 1
+        del output_reblurred_ph, u, v, f_u, f_s, R, R_prima, relative_blur_u, relative_blur_s, error_estimate_u, error_estimate_s
+        torch.cuda.empty_cache()
 
 
-def run_DRUNet(denoiser, inp_img, sigma, compute_grad=True):
+    # output[output < 0] = 0
+    # output[output > 1] = 1
 
-    aux = torch.cat((inp_img, sigma.repeat(1, 1, inp_img.shape[2], inp_img.shape[3])), dim=1)
-    aux = aux.float()  # added GC
-    if compute_grad:
-        denoised_img = utils_model.test_mode(denoiser, aux, mode=1, refield=32, min_size=256, modulo=16)
-    else:
-        with torch.no_grad():
-            denoised_img = utils_model.test_mode(denoiser, aux, mode=1, refield=32, min_size=256, modulo=16)
 
-    return denoised_img
+    #del non_zero_elements, dilation_kernel, smooth_kernel, erosion_kernel
+
+    return output
+
+
+
+
+
+
+
+
