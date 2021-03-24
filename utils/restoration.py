@@ -140,9 +140,6 @@ def combined_RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, 
                         apply_dilation=True, isDebug=False):
     epsilon = 1e-6
     output = initial_output
-    deblug_folder = './RL_deblug'
-    if not os.path.exists(deblug_folder):
-        os.makedirs(deblug_folder)
 
     erosion_kernel = torch.ones(1, 1, 3, 3).to(output.device)
     smooth_kernel = 1.0 / 9 * torch.ones(1, 1, 3, 3).to(output.device)
@@ -229,20 +226,9 @@ def combined_RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, 
             if (((SAVE_INTERMIDIATE and it % np.max([1, n_iters // 10]) == 0) or it == (n_iters - 1))):  # ''' '''
                 PSNR_reblur = 10 * np.log10(1 / reblur_loss.item())
                 print(it, 'PSNR_reblur: ', PSNR_reblur.item())
-                if it == (n_iters - 1):
-                    filename = os.path.join(deblug_folder, 'restored_n_%f.png' % (n_iters))
-                else:
-                    filename = os.path.join(deblug_folder, 'iter_%06i.png' % it)
 
-                save_image(tensor2im(output[0].detach().clamp(0, 1) - 0.5), filename)
-                save_image(tensor2im(u[0].detach().clamp(0, 1) - 0.5),
-                           os.path.join(deblug_folder, 'u_iter_%06i.png' % it))
-                save_image(tensor2im(v[0].detach().clamp(0, 1) - 0.5),
-                           os.path.join(deblug_folder, 'v_iter_%06i.png' % it))
-                # save_image(tensor2im(f_u[0].detach().clamp(0, 1) - 0.5),
-                #            os.path.join(deblug_folder, 'f_u_iter_%06i.png' % it))
-                # save_image(tensor2im(f_s[0].detach().clamp(0, 1) - 0.5),
-                #            os.path.join(deblug_folder, 'f_s_iter_%06i.png' % it))
+
+
 
         #output = (output - output.min()) / (output.max() - output.min())
         #output[output < 0] = 0
