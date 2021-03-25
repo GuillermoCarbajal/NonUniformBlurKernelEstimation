@@ -13,13 +13,13 @@ Model can be anonimously downloaded from [here](https://www.dropbox.com/s/ei4rhu
 
 
 Additional options:   
-  --blurry_images: may be a singe image path or a .txt with a list of images.
+  `--blurry_images`: may be a singe image path or a .txt with a list of images.
   
-  --n_iters: number of iterations in the RL optimization (default=30)       
+  `--n_iters`: number of iterations in the RL optimization (default 30)       
   
-  --resize_factor: input image resize factor (default=1)     
+  `--resize_factor`: input image resize factor (default 1)     
   
-  --saturation_method: 'combined' or 'basic'. When 'combined' is passed RL in the presence of saturated pixels is applied. Otherwise,  simple RL update rule is applied in each iteration. For Kohler images, 'basic' is applied. For RealBlur images 'combined' is better.
+  `--saturation_method`: `'combined'` or `'basic'`. When `'combined'` is passed RL in the presence of saturated pixels is applied. Otherwise,  simple RL update rule is applied in each iteration. For Kohler images, `'basic'` is applied. For RealBlur images `'combined'` is better.
   
-  --gamma_factor: gamma correction factor. By default is assummed gamma_factor=2.2. For Kohler dataset images gamma_factor=1.0.
+  `--gamma_factor`: gamma correction factor. By default is assummed `gamma_factor=2.2`. For Kohler dataset images `gamma_factor=1.0`.
 
