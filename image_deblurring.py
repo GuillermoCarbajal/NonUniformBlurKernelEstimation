@@ -1,6 +1,6 @@
 import numpy as np
 import argparse
-from models.TwoHeadsNetwork_ICCV import TwoHeadsNetwork
+from models.TwoHeadsNetwork import TwoHeadsNetwork
 
 import torch
 from scipy.io import savemat
@@ -59,16 +59,7 @@ def get_images_list(list_path):
 
     return images_list
 
-def compute_kernels_from_base(base_kernels, masks, GPU=0):
-    output_kernel = torch.empty((masks.shape[-2],masks.shape[-1],base_kernels.shape[-2]*base_kernels.shape[-1])).cuda(GPU)
-    for k in range(base_kernels.shape[0]):
-        kernel_k = base_kernels[ k, :, :].view(-1)
-        masks_k = masks[k, :, :]
-        aux = masks_k[:, :, None] * kernel_k[None, None, :]
-        output_kernel += aux
-        del aux
-        torch.cuda.empty_cache()
-    return output_kernel
+
 
 
 if args.blurry_images.endswith('.txt'):

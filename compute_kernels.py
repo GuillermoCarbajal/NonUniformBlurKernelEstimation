@@ -5,7 +5,7 @@ from skimage.io import imread, imsave
 from skimage.transform import resize
 from skimage import img_as_ubyte
 
-from models.TwoHeadsNetwork_ICCV import TwoHeadsNetwork
+from models.TwoHeadsNetwork import TwoHeadsNetwork
 
 import torch
 from torchvision import transforms
