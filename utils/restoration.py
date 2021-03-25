@@ -237,11 +237,7 @@ def combined_RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, 
         torch.cuda.empty_cache()
 
 
-    # output[output < 0] = 0
-    # output[output > 1] = 1
 
-
-    #del non_zero_elements, dilation_kernel, smooth_kernel, erosion_kernel
 
     return output
 
