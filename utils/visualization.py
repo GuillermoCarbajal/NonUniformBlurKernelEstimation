@@ -1,6 +1,5 @@
 import torchvision
 import numpy as np
-#from torch.utils.tensorboard import SummaryWriter
 import torch
 from PIL import Image
 from skimage.io import imread, imsave
@@ -87,7 +86,6 @@ def save_kernels_grid_green(blurry_image, kernels, masks, image_name):
                 0.5 * grid_to_draw[:, i - kernel_size // 2:i + kernel_size // 2 + 1,
                       j - kernel_size // 2:j + kernel_size // 2 + 1] + 0.5 * kernel_ij_norm[:, ::-1, ::-1]
 
-    #self.add_image(image_name, grid_to_draw, step)
     imsave(image_name, img_as_ubyte(grid_to_draw.transpose((1, 2, 0))))
 
 def save_kernels_grid(blurry_image, kernels, masks, image_name):
@@ -121,14 +119,9 @@ def save_kernels_grid(blurry_image, kernels, masks, image_name):
             grid_to_draw[1:, i - kernel_size // 2:i + kernel_size // 2 + 1,
             j - kernel_size // 2:j + kernel_size // 2 + 1] = (1- kernel_ij_norm[1:, ::-1, ::-1]) * grid_to_draw[1:, i - kernel_size // 2:i + kernel_size // 2 + 1,
                       j - kernel_size // 2:j + kernel_size // 2 + 1]
-            #grid_to_draw[ind_kernels]
 
-            #0.5 * ft(ids_ker) + (1 - ft(ids_ker)). * imMotion(ids_img)
 
-    #self.add_image(image_name, grid_to_draw, step)
     grid_to_draw = np.clip(grid_to_draw, 0, 1)
     imsave(image_name, img_as_ubyte(grid_to_draw.transpose((1, 2, 0))))
 
-    #imMotion(ids_img) = 0.5 * ft(ids_ker) + (1 - ft(ids_ker)). * imMotion(ids_img);
-    #imMotion(ids_img + r * c) = (1 - ft(ids_ker)). * imMotion(ids_img + r * c);
-    #imMotion(ids_img + 2 * r * c) = (1 - ft(ids_ker)). * imMotion(ids_img + 2 * r * c);
+   
