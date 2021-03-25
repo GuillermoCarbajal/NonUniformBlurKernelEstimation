@@ -128,8 +128,7 @@ def RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, GPU,
 
                 print(it, 'PSNR_reblur: ', PSNR_reblur.item())
 
-        #output[output < 0] = 0
-        #output[output > 1] = 1
+
 
     return output
 
@@ -165,8 +164,7 @@ def combined_RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, 
             for c in range(u.shape[1]):
                 u[0:1, c:c + 1, :, :] = F.conv2d(u[:, c:c + 1, :, :], smooth_kernel, padding=smooth_kernel.shape[2] // 2)
 
-        # u, _=torch.min(u, dim=1, keepdim =True)
-        # u =  torch.repeat_interleave(u,3,dim=1)
+
         f_u = u * output
         f_s = output - f_u
 
@@ -230,9 +228,7 @@ def combined_RL_restore(blurry_tensor, initial_output, kernels, masks, n_iters, 
 
 
 
-        #output = (output - output.min()) / (output.max() - output.min())
-        #output[output < 0] = 0
-        #output[output > 1] = 1
+
         del output_reblurred_ph, u, v, f_u, f_s, R, R_prima, relative_blur_u, relative_blur_s, error_estimate_u, error_estimate_s
         torch.cuda.empty_cache()
 
