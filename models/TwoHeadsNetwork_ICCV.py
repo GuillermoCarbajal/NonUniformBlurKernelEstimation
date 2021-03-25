@@ -88,7 +88,6 @@ class TwoHeadsNetwork(nn.Module):
         x5_feat, x6 = self.down5(x5)
         x6_feat = self.feat(x6)
 
-        #print(x1.shape, x2.shape, x3.shape, x4.shape, x5.shape, x6.shape)
         #k = self.kernel_network(x3)
         feat6_gap = x6_feat.mean((2,3), keepdim=True) #self.feat6_gap(x6_feat)
         #print('x6_feat: ', x6_feat.shape,'feat6_gap: ' , feat6_gap.shape)
@@ -209,11 +208,11 @@ class Up(nn.Module):
 
             x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
                         diffY // 2, diffY - diffY // 2])
-            #print('x2: ', x2.shape)
+
             x = torch.cat([x2, x1], dim=1)
         else:
             x = x1
-        #print('input feat forward', x.shape)
+
         feat = self.feat(x)
         return feat
 
