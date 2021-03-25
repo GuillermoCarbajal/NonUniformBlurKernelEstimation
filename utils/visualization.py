@@ -7,63 +7,6 @@ from skimage.io import imread, imsave
 from skimage import img_as_ubyte
 from skimage.color import rgb2gray
 
-# class Tensorboard_Visualizer(SummaryWriter):
-#
-#
-#     def show_kernels(self, kernels, image_name, step=0, normalize=True, scale_each=True):
-#         '''
-#
-#         :param
-#         kernels: array of (K, W, H) that contains K kernels with size (W,H)
-#         :return:
-#         '''
-#         K = kernels.size(0)
-#         kernels = kernels[:, np.newaxis, :, :]  # make_grid expect an array of size (K,C,W,W) where C is the number of channels
-#         kernels_grid = torchvision.utils.make_grid(kernels, nrow=K, normalize=normalize,
-#                                                       scale_each=scale_each)
-#         self.add_image(image_name, kernels_grid, step)
-#
-#     def show_masks(self, masks, image_name, step=0, normalize=False, scale_each=False):
-#         '''
-#
-#         :param
-#         kernels: array of (K, W, H) that contains K kernels with size (W,H)
-#         :return:
-#         '''
-#         K = masks.size(0)
-#         masks = masks[:, np.newaxis, :, :]  # make_grid expect an array of size (K,C,W,W) where C is the number of channels
-#         kernels_grid = torchvision.utils.make_grid(masks, nrow=K, normalize=normalize, scale_each=scale_each)
-#         self.add_image(image_name, kernels_grid, step)
-#
-#     def show_kernels_grid(self, blurry_image, kernels, masks, image_name, step=0):
-#         '''
-#
-#         :param blurry_image:
-#         :param kernels:
-#         :param masks:
-#         :return:
-#         '''
-#         K = masks.size(0)
-#         M = masks.size(1)
-#         N = masks.size(2)
-#         kernel_size = kernels.size(1)
-#
-#         blurry_image = blurry_image.cpu().numpy()
-#         kernels = kernels.detach().cpu().numpy()
-#         masks = masks.detach().cpu().numpy()
-#
-#         grid_to_draw = np.clip(blurry_image.copy(),0,1)
-#
-#         for i in range(kernel_size, M-kernel_size//2, kernel_size):
-#             for j in range(kernel_size, N-kernel_size//2, kernel_size):
-#                 kernel_ij = np.zeros((3, kernel_size,kernel_size))
-#                 for k in range(K):
-#                     kernel_ij[1, :, :] += masks[k,i,j]*kernels[k]
-#                 kernel_ij_norm = (kernel_ij - kernel_ij.min())/(kernel_ij.max() - kernel_ij.min())
-#                 grid_to_draw[:,i-kernel_size//2:i+kernel_size//2+1, j-kernel_size//2:j+kernel_size//2+1]= \
-#                     0.5*grid_to_draw[:,i-kernel_size//2:i+kernel_size//2+1, j-kernel_size//2:j+kernel_size//2+1] + 0.5*kernel_ij_norm[:,::-1,::-1]
-#
-#         self.add_image(image_name, grid_to_draw, step)
 
 
 # Converts a Tensor into a Numpy array
