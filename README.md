@@ -3,10 +3,12 @@ Official Pytorch Implementation  of Non-uniform Motion Blur Kernel Estimation vi
 <p align="center">
 <img width="700" src="imgs/Comparison_kernels.png?raw=true">
 </p>
+
 ## Network Architecture
 <p align="center">
 <img width="900" src="imgs/architecture.png?raw=true">
   </p>
+  
 ## Getting Started
 
 ### Clone Repository
