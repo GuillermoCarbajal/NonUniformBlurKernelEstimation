@@ -12,14 +12,15 @@ git clone https://github.com/GuillermoCarbajal/NonUniformBlurKernelEstimationVia
 
 Model can be downloaded from [here](https://www.dropbox.com/s/ei4rhu7di8qpgml/TwoHeads.pkl?dl=0)
 ### Compute kernels from an image
-
-`python compute_kernels.py -i image_path -m model_path`
-
+```
+python compute_kernels.py -i image_path -m model_path
+```
 
 
 ### Deblur an image or a list of images
-
-`python image_deblurring.py -b blurry_img_path --reblur_model model_path --output_folder results`
+```
+python image_deblurring.py -b blurry_img_path --reblur_model model_path --output_folder results
+```
 
 ### Parameters
 Additional options:   
