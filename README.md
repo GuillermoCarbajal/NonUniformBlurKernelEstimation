@@ -1,6 +1,8 @@
 # Non-uniform Motion Blur Kernel Estimation via Adaptive Decomposition
 Official Pytorch Implementation  of Non-uniform Motion Blur Kernel Estimation via Adaptive Decomposition [<a href="https://arxiv.org/abs/2102.01026">ArXiv</a>]
 
+## Network Architecture
+[<img width="900" src="imgs/architecture.png?raw=true">](imgs/architecture.png?raw=true)
 ## Getting Started
 
 ### Clone Repository
