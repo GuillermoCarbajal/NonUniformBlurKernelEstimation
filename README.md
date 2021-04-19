@@ -49,7 +49,7 @@ If you use this code for your research, please cite our paper <a href="https://a
 
 ```
 @article{carbajal2021single,
-  title={Single Image Non-uniform Blur Kernel Estimation via Adaptive Basis Decomposition},
+  title={Non-uniform Motion Blur Kernel Estimation via Adaptive Decomposition},
   author={Carbajal, Guillermo and Vitoria, Patricia and Delbracio, Mauricio and Mus{\'e}, Pablo and Lezama, Jos{\'e}},
   journal={arXiv e-prints},
   pages={arXiv--2102},
