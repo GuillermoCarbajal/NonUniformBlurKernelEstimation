@@ -128,4 +128,5 @@ for i,blurry_path in enumerate(blurry_images_list):
 
     output_img = tensor2im(torch.clamp(output[0],0,1) - 0.5)
     save_image(output_img, os.path.join(args.output_folder, img_name + '_restored.png' ))
+    print('Output saved in ', os.path.join(args.output_folder, img_name + '_restored.png' ))
 

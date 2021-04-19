@@ -20,7 +20,6 @@ parser.add_argument('--output_dir','-o', type=str, help='path of the output dire
 parser.add_argument('--gpu_id', '-g', type=int, default=0)
 parser.add_argument('--gamma_factor', type=float, default=2.2, help='gamma correction factor')
 
-
 K = 25 # number of elements en the base
 opt = parser.parse_args()
 blurry_image_filename = opt.img
