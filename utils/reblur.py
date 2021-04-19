@@ -70,7 +70,6 @@ def backward_reblur(sharp_estimated, kernels, masks, GPU=0, size='valid', paddin
     for num in range(N):  # print('n = ',n)
         for c in range(C):
 
-                # # print('gt padded one channel shape: ', gt_n_padded_c.shape)
                 aux = sharp_estimated[num:num + 1, c:c + 1, :, :] * masks[num:num + 1]
                 if size == 'valid':
                     H += -K + 1
@@ -80,7 +79,6 @@ def backward_reblur(sharp_estimated, kernels, masks, GPU=0, size='valid', paddin
 
                 conv_output = F.conv2d(aux, kernels[num][ :, np.newaxis, :, :], groups=n_kernels)
 
-                # print('conv output shape: ', conv_output.shape)
                 output_reblurred[num:num + 1, :, c, :, :] = conv_output
                 del conv_output
 
