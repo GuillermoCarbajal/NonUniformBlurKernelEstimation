@@ -8,7 +8,7 @@ import torch.nn.functional as F
 
 class TwoHeadsNetwork(nn.Module):
     def __init__(self, K=9, blur_kernel_size=33, bilinear=False,
-                 no_softmax=False, input_size=256):
+                 no_softmax=False):
         super(TwoHeadsNetwork, self).__init__()
 
         self.no_softmax = no_softmax
@@ -51,11 +51,11 @@ class TwoHeadsNetwork(nn.Module):
             nn.Softmax(dim=1),
         )
 
-        self.feat5_gap = PooledSkip(1024, input_size//16, 2)  # 1024
-        self.feat4_gap = PooledSkip(512, input_size//8, 4)   # 512
-        self.feat3_gap = PooledSkip(256, input_size//4, 8)   # 256
-        self.feat2_gap = PooledSkip(256,input_size//2, 16)   # 256
-        self.feat1_gap = PooledSkip(256, input_size, 32)  # 256
+        self.feat5_gap = PooledSkip(2)
+        self.feat4_gap = PooledSkip(4)  
+        self.feat3_gap = PooledSkip(8)  
+        self.feat2_gap = PooledSkip(16)  
+        self.feat1_gap = PooledSkip(32) 
 
         self.kernel_up1 = Up(1024,1024, 512, bilinear)
         self.kernel_up2 = Up(512,512, 256, bilinear)
@@ -214,10 +214,9 @@ class Up(nn.Module):
         return feat
 
 class PooledSkip(nn.Module):
-    def __init__(self, input_channels, input_spatial_size, output_spatial_size, antialiased=False, antialiased_kernel_size=3, max_pooling=False):
+    def __init__(self, output_spatial_size):
         super().__init__()
 
-        self.gap = nn.AvgPool2d(input_spatial_size)
         self.output_spatial_size = output_spatial_size
 
     def forward(self, x):
